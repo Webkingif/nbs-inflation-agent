@@ -1,26 +1,25 @@
-version: '3.8'
-
 services:
   n8n:
-    build: .
-    image: n8n_custom:latest
+    image: naskio/n8n-python:latest
     container_name: n8n_nbs_orchestrator
     restart: always
+
     ports:
       - "5678:5678"
+
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
-      - NODE_FUNCTION_ALLOW_BUILTIN=*
-      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - NODES_EXCLUDE=[]
       - .env
+
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./samples:/data/nbs_reports # Share local PDF folder with container
+      - ./samples:/data/nbs_reports
       - ./src:/data/src
 
 volumes:
