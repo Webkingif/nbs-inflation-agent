@@ -5,7 +5,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
 from typing import List, Optional
-from src.utils.state_mapper import normalize_state
+from utils.state_mapper import normalize_state
 
 # Initialize the Gemini client (picks up GEMINI_API_KEY from environment variables)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
