@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    build: .
+    image: n8n_custom:latest
     container_name: n8n_nbs_orchestrator
     restart: always
     ports:
@@ -15,9 +16,12 @@ services:
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
       - NODE_FUNCTION_ALLOW_BUILTIN=*
       - NODE_FUNCTION_ALLOW_EXTERNAL=*
+      - NODES_EXCLUDE=[]
+      - .env
     volumes:
       - n8n_data:/home/node/.n8n
       - ./samples:/data/nbs_reports # Share local PDF folder with container
+      - ./src:/data/src
 
 volumes:
   n8n_data:
