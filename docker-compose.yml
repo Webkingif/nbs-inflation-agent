@@ -7,18 +7,16 @@ services:
     ports:
       - "5678:5678"
 
+    env_file:
+      - .env
+
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
       - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - SUPABASE_DB_URL=${SUPABASE_DB_URL}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - NODES_EXCLUDE=[]
-      - .env
 
     volumes:
       - n8n_data:/home/node/.n8n
