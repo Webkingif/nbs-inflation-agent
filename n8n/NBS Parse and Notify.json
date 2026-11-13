@@ -1,0 +1,122 @@
+{
+  "name": "NBS Parse and Notify",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "pdf_path"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "37cb2da8-b2ca-42cb-8a50-8e5470cb9128",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "command": "=python3 /data/src/parser.py --pdf-path \"{{ $json.pdf_path }}\""
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "990a1ade-8dda-4545-a2a3-c82502660043",
+      "name": "Execute Command"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================\n// Workflow B - Code node: build Telegram summary from parser.py JSON\n// Input:  $json.stdout  (one JSON line from parser.py)\n// Output: [{ json: { summary, pdf_path, ...metrics } }]\n// =============================================================\n\nconst raw = ($json.stdout || '').trim();\nif (!raw) {\n  throw new Error('parser.py produced empty stdout — check stderr for the real error');\n}\n\n// parser.py prints one JSON object. If there were stray lines, take the\n// last line that starts with \"{\".\nconst lines = raw.split('\\n').map(l => l.trim()).filter(Boolean);\nconst jsonLine = [...lines].reverse().find(l => l.startsWith('{'));\nif (!jsonLine) {\n  throw new Error('no JSON found in parser.py stdout:\\n' + raw.slice(0, 500));\n}\n\nlet data;\ntry {\n  data = JSON.parse(jsonLine);\n} catch (e) {\n  throw new Error(`stdout is not valid JSON: ${e.message}\\nFirst 500 chars:\\n${jsonLine.slice(0, 500)}`);\n}\n\nconst records = Array.isArray(data.data_records) ? data.data_records : [];\n\n// ----- formatters -------------------------------------------------\nconst fmtNgn = v => {\n  if (v == null || !Number.isFinite(Number(v))) return 'n/a';\n  return '₦' + Number(v).toLocaleString('en-NG', {\n    minimumFractionDigits: 2,\n    maximumFractionDigits: 2,\n  });\n};\n\nconst fmtPct = v => {\n  if (v == null || !Number.isFinite(Number(v))) return 'n/a';\n  const n = Number(v);\n  return (n >= 0 ? '+' : '') + n.toFixed(2) + '%';\n};\n\n// HTML escape for Telegram parse_mode=HTML\nconst esc = s => String(s == null ? '' : s)\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;');\n\n// ----- metrics ----------------------------------------------------\nconst prices = records\n  .map(r => Number(r.price_ngn))\n  .filter(v => Number.isFinite(v) && v > 0);\n\nconst nationalAvg = prices.length\n  ? prices.reduce((a, b) => a + b, 0) / prices.length\n  : null;\n\nconst mom = records.find(r => r.mom_change_pct != null)?.mom_change_pct ?? null;\nconst yoy = records.find(r => r.yoy_change_pct != null)?.yoy_change_pct ?? null;\n\n// State rows only — drop \"Average\" / \"National\" / \"All\" / \"Total\"\nconst stateRows = records.filter(r => {\n  const name = String(r.raw_state_name || '').toLowerCase().trim();\n  const price = Number(r.price_ngn);\n  return (\n    r.raw_state_name &&\n    Number.isFinite(price) &&\n    price > 0 &&\n    !['average', 'national', 'all', 'total'].includes(name)\n  );\n});\n\nstateRows.sort((a, b) => Number(b.price_ngn) - Number(a.price_ngn));\n\nconst top3 = stateRows.slice(0, 3);\nconst bottom3 = stateRows.slice(-3).reverse();\n\n// ----- header -----------------------------------------------------\nconst months = [\n  '', 'January', 'February', 'March', 'April', 'May', 'June',\n  'July', 'August', 'September', 'October', 'November', 'December',\n];\nconst monthLabel =\n  months[Number(data.publication_month)] || String(data.publication_month || '?');\n\nconst reportType = data.report_type || 'N/A';\nconst pubYear = data.publication_year || '?';\n\n// ----- compose message -------------------------------------------\nconst out = [];\nout.push(`📊 <b>NBS Report — ${esc(monthLabel)} ${esc(pubYear)}</b>`);\nout.push(`Type: ${esc(reportType)}`);\nout.push('');\n\nif (nationalAvg != null) {\n  out.push(`📈 <b>National avg:</b> ${fmtNgn(nationalAvg)}`);\n}\nout.push(`🔼 <b>MoM:</b> ${fmtPct(mom)}   <b>YoY:</b> ${fmtPct(yoy)}`);\nout.push('');\n\nif (top3.length) {\n  out.push('<b>Top 3 highest:</b>');\n  for (const r of top3) {\n    out.push(`  • ${esc(r.raw_state_name)} — ${fmtNgn(r.price_ngn)}`);\n  }\n  out.push('');\n}\n\nif (bottom3.length) {\n  out.push('<b>Top 3 lowest:</b>');\n  for (const r of bottom3) {\n    out.push(`  • ${esc(r.raw_state_name)} — ${fmtNgn(r.price_ngn)}`);\n  }\n  out.push('');\n}\n\nout.push(`${stateRows.length} state rows · ${records.length} total records parsed`);\n\n// ----- output -----------------------------------------------------\nreturn [{\n  json: {\n    summary: out.join('\\n'),\n    pdf_path: $json.pdf_path || null,\n    publication_month: data.publication_month,\n    publication_year: data.publication_year,\n    report_type: reportType,\n    record_count: records.length,\n    state_count: stateRows.length,\n    national_avg: nationalAvg,\n    mom_pct: mom,\n    yoy_pct: yoy,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "cd1a75d3-f79d-4c6e-9ea4-d193c715bb9e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "=6733336095",
+        "text": "={{ $json.summary }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "728b62a0-1a35-4157-969d-d811f113e2df",
+      "name": "Send a text message",
+      "webhookId": "71bf867a-691e-4d1a-b2d0-feca485e7010",
+      "credentials": {
+        "telegramApi": {
+          "id": "2iFMzznLoj5VzAnk",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Command": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "15f43e7b-9215-4b43-9863-d4962e1707e3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8876e7640f9a03b9461aedfde2a843707b8bec68b72aaa9169157b654a43774f"
+  },
+  "id": "gsBKrbaqhvMuS22H",
+  "tags": []
+}
