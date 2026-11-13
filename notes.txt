@@ -5,3 +5,8 @@ docker exec -it n8n_nbs_orchestrator pip3 install --no-cache-dir python-telegram
 
 
 the Dockerfile isn't used because the app uses image: and not build: .
+
+
+workflow b is
+
+http://localhost:5678/workflow/gsBKrbaqhvMuS22H?projectId=pqnlw5jgSd44lzed

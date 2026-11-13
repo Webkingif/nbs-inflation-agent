@@ -99,17 +99,16 @@ def _fetch(session, url, dest):
 
 def _resource_pdfs_on_disk(fname: str, save_dir: str) -> list:
     """
-    For a ZIP resource named PMS_Report_MAY_2026.zip, we cannot know
-    which PDFs it contained. But if *any* file matching the report stem
-    is on disk (e.g. PMS_Report_MAY_2026.pdf or similar), treat it as
-    already-downloaded so a scheduled run does not re-fetch it.
-    A plain .pdf resource is its own on-disk artifact.
+    Return list of PDFs already on disk that came from this resource, or [].
+    For a .pdf resource, that's the file itself.
+    For a .zip, we guess the extracted PDF shares the ZIP stem (e.g.
+    PMS_Report_MAY_2026.zip -> PMS_Report_MAY_2026.pdf). If found and
+    non-empty, treat as already-downloaded so scheduled runs don't refetch.
     """
     if fname.lower().endswith(".pdf"):
         target = os.path.join(save_dir, fname)
         return [target] if os.path.exists(target) and os.path.getsize(target) > 0 else []
 
-    # ZIP: try the common naming — same stem with .pdf extension
     stem = os.path.splitext(fname)[0]
     for ext in (".pdf", ".PDF"):
         candidate = os.path.join(save_dir, stem + ext)
@@ -147,14 +146,12 @@ def run(save_dir: str, probe: int) -> dict:
     for url, fname in probes:
         tried.append(fname)
 
-        # Case A: resource is already on disk from a previous run.
         existing = _resource_pdfs_on_disk(fname, save_dir)
         if existing:
             skipped += 1
             print(f"⏭️  Already have: {fname}", file=sys.stderr)
-            break  # top of page is already covered → done
+            break
 
-        # Case B: try to download this resource.
         target = os.path.join(save_dir, fname)
         try:
             print(f"⬇️  {fname}", file=sys.stderr)
@@ -168,17 +165,15 @@ def run(save_dir: str, probe: int) -> dict:
 
             if not pdfs:
                 print(f"⚠️  {fname} produced 0 PDFs — trying next", file=sys.stderr)
-                continue  # broken resource; probe the next one
+                continue
 
             downloaded.extend(pdfs)
             print(f"✅ {fname} → {len(pdfs)} PDF(s)", file=sys.stderr)
-            break  # we got a valid report → stop
+            continue
         except Exception as e:
             print(f"❌ {fname}: {e} — trying next", file=sys.stderr)
-            continue  # broken download; probe the next one
+            continue
 
-    # A "success" is: we have ≥1 new PDF, OR the top-of-page resource was
-    # already on disk from a prior run.
     if downloaded or skipped:
         print(f"Downloaded {len(downloaded)} new files to {save_dir}")
         return {"count": len(downloaded), "skipped": skipped,
